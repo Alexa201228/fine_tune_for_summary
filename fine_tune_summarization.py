@@ -11,6 +11,8 @@ from huggingface_hub import login
 from dotenv import load_dotenv
 from transformers import AutoTokenizer
 import evaluate
+import torch
+
 
 load_dotenv()
 login(token=os.getenv("HF_TOKEN"))
@@ -25,12 +27,15 @@ class SaveBestModelCallback(TrainerCallback):
     def on_evaluate(self, args, state, control, **kwargs):
         # Get metrics from last evaluation
         metrics = state.log_history[-1]
+        print(metrics)
         if "eval_rougeL" in metrics:
             current_rouge = metrics["eval_rougeL"]
             if current_rouge > self.best_rouge:
                 self.best_rouge = current_rouge
-                kwargs["model"].save_pretrained("./best_model")
-                kwargs["tokenizer"].save_pretrained("./best_model")
+                kwargs["model"].save_pretrained("./flan-t5-cnn-summarizer/best_model")
+                kwargs["processing_class"].save_pretrained(
+                    "./flan-t5-cnn-summarizer/best_model"
+                )
                 print(f"🔥 New best model saved with ROUGE-L: {current_rouge:.2f}")
 
 
@@ -89,7 +94,7 @@ def train_model(dataset, model_name):
     # Key Fix 5: Correct training arguments
     training_args = Seq2SeqTrainingArguments(
         output_dir="./flan-t5-cnn-summarizer",
-        evaluation_strategy="epoch",  # Fixed typo from 'eval_strategy'
+        eval_strategy="epoch",  # Fixed typo from 'eval_strategy'
         learning_rate=3e-5,
         per_device_train_batch_size=2,
         per_device_eval_batch_size=2,
@@ -108,7 +113,7 @@ def train_model(dataset, model_name):
         args=training_args,
         train_dataset=split_dataset["train"],
         eval_dataset=split_dataset["test"],
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         compute_metrics=compute_metrics,  # Added metrics computation
         callbacks=[SaveBestModelCallback()],  # Simplified callback
     )
@@ -118,6 +123,7 @@ def train_model(dataset, model_name):
 
 if __name__ == "__main__":
     # Verify dataset structure matches your preprocessing
+    print(torch.cuda.is_available())
     ds = load_dataset("kritsadaK/EDGAR-CORPUS-Financial-Summarization")
 
     # Check actual column names in the dataset
